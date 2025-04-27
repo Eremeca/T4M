@@ -301,7 +301,7 @@ class ThreadWizard(QtWidgets.QDialog):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Erreur", f"Erreur lors de la création du modèle : {str(e)}")
 
-    def create_nominal_profile(self, sketch, diameter, pitch):
+    def create_nominal_profile(self, sketch, diameter, pitch, thread_type):
         if thread_type == "Rd":
             r1 = 0.25 * pitch  # Rayon de crête
             r2 = 0.15 * pitch  # Rayon de fond
