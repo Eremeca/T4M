@@ -1,0 +1,318 @@
+import FreeCAD
+import FreeCADGui
+import Part
+import PartDesign
+import Sketcher
+from PySide2 import QtWidgets, QtCore
+
+# Calcul des dimensions du profil ISO trapézoïdal (norme ISO-2901-2016)
+def calculate_thread_profiles(diameter, pitch):
+    """
+    Calcule les dimensions du profil nominal (trapézoïdal) ainsi que
+    les dimensions effectives pour le filetage mâle (vis) et le taraudage (écrou).
+    """
+    H = 1.866025404 * pitch
+    H2 = 0.5 * pitch
+    w = 0.366025404 * pitch
+    r = 0.1443 * pitch  # Rayon de fond standard ISO
+
+    d_major = diameter           # Pour la vis, diamètre de crête
+    d_minor = diameter - 2*(H - H2)  # Pour la vis (ou l'écrou), diamètre de fond
+
+    return {
+        "base_profile": {"H": H, "H2": H2, "w": w, "r": r},
+        "male_thread": {"d_major": d_major, "d_minor": d_minor},
+        "female_thread": {"d_major": d_major, "d_minor": d_minor},
+    }
+
+# Données de filetage (ici, uniquement le type "Tr" est renseigné)
+thread_data = {
+    "Tr": {
+        8: {"pitches": [1.5, 2], "preferred": 1.5},
+         9: {"pitches": [1.5, 2], "preferred": 1.5},
+        10: {"pitches": [1.5, 2], "preferred": 2},
+        11: {"pitches": [2, 3], "preferred": 2},
+        12: {"pitches": [2, 3], "preferred": 3},
+        14: {"pitches": [2, 3], "preferred": 3},
+        16: {"pitches": [2, 4], "preferred": 4},
+        18: {"pitches": [2, 4], "preferred": 4},
+        20: {"pitches": [2, 4], "preferred": 4},
+        # … autres diamètres éventuellement
+        300: {"pitches": [12, 24, 44], "preferred": 24}
+    }
+}
+
+class ThreadWizard(QtWidgets.QDialog):
+    def __init__(self):
+        super(ThreadWizard, self).__init__()
+        self.setWindowTitle("Assistant de taraudage")
+        self.setMinimumWidth(400)
+
+        # Onglets : le premier contient l'interface de paramétrage
+        self.tabs = QtWidgets.QTabWidget()
+        self.tab1 = QtWidgets.QWidget()
+        self.tabs.addTab(self.tab1, "Type de filetage et Paramètres")
+        self.create_tab1()
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.tabs)
+        self.setLayout(layout)
+        
+        # Pour stocker le résumé généré avec les paramètres
+        self.summary_html = ""
+
+    def create_tab1(self):
+        layout = QtWidgets.QFormLayout()
+
+        # ComboBox pour le type de filetage
+        self.thread_type_combo = QtWidgets.QComboBox()
+        self.thread_type_combo.addItems(list(thread_data.keys()))
+
+        # ComboBox pour le diamètre (renseigné à partir des clés du dictionnaire "Tr")
+        self.diameter_combo = QtWidgets.QComboBox()
+        diameters = sorted([str(d) for d in thread_data["Tr"].keys()], key=lambda x: int(x))
+        self.diameter_combo.addItems(diameters)
+        self.diameter_combo.currentIndexChanged.connect(self.update_pitch_options)
+        self.thread_type_combo.currentIndexChanged.connect(self.update_pitch_options)
+
+        # ComboBox pour le pas
+        self.pitch_combo = QtWidgets.QComboBox()
+        
+        # SpinBox pour le nombre de filets
+        self.num_threads_spin = QtWidgets.QSpinBox()
+        self.num_threads_spin.setMinimum(1)
+        self.num_threads_spin.setValue(1)
+
+        self.validate_params_btn = QtWidgets.QPushButton("Valider les paramètres")
+        self.validate_params_btn.clicked.connect(self.create_summary)
+
+        self.model_button = QtWidgets.QPushButton("Modéliser")
+        self.model_button.clicked.connect(self.create_model)
+        self.model_button.setEnabled(False)
+
+        self.summary_label = QtWidgets.QLabel()
+
+        layout.addRow("Type de filetage :", self.thread_type_combo)
+        layout.addRow("Diamètre :", self.diameter_combo)
+        layout.addRow("Pas :", self.pitch_combo)
+        layout.addRow("Nombre de filets :", self.num_threads_spin)
+        layout.addRow(self.summary_label)
+        layout.addRow(self.validate_params_btn)
+        layout.addRow(self.model_button)
+
+        self.tab1.setLayout(layout)
+        self.update_pitch_options()
+
+    def update_pitch_options(self):
+        """Mets à jour le combobox des pas en fonction du type et diamètre sélectionnés."""
+        thread_type = self.thread_type_combo.currentText()
+        current_text = self.diameter_combo.currentText()
+        if not current_text:
+            return
+        diameter = int(current_text)
+        if thread_type in thread_data and diameter in thread_data[thread_type]:
+            available_pitches = thread_data[thread_type][diameter]["pitches"]
+            preferred_pitch = thread_data[thread_type][diameter]["preferred"]
+        else:
+            available_pitches = [1.5, 2.0, 2.5]
+            preferred_pitch = None
+
+        self.pitch_combo.clear()
+        for p in available_pitches:
+            self.pitch_combo.addItem(str(p))
+        if preferred_pitch and preferred_pitch in available_pitches:
+            index = available_pitches.index(preferred_pitch)
+            self.pitch_combo.setCurrentIndex(index)
+
+    def create_summary(self):
+        """Génère le résumé des paramètres avec les données nominales."""
+        try:
+            diameter = int(self.diameter_combo.currentText())
+            pitch = float(self.pitch_combo.currentText())
+            num_threads = self.num_threads_spin.value()
+
+            profile = calculate_thread_profiles(diameter, pitch)
+            base = profile["base_profile"]
+            male = profile["male_thread"]
+            female = profile["female_thread"]
+
+            self.summary_html = (
+                "<b>Paramètres sélectionnés :</b><br>"
+                f"&nbsp;&nbsp;• <b>Filetage :</b> {self.thread_type_combo.currentText()}{diameter}x{pitch}<br>"
+                f"&nbsp;&nbsp;• <b>Nombre de filets :</b> {num_threads}<br><br>"
+                "<b>📏 Données nominales :</b><br>"
+                f"&nbsp;&nbsp;&nbsp;&nbsp;- H = {base['H']:.3f} mm<br>"
+                f"&nbsp;&nbsp;&nbsp;&nbsp;- H₂ = {base['H2']:.3f} mm<br>"
+                f"&nbsp;&nbsp;&nbsp;&nbsp;- w = {base['w']:.3f} mm<br>"
+                f"&nbsp;&nbsp;&nbsp;&nbsp;- r = {base['r']:.3f} mm<br><br>"
+                "<b>🔩 Profil vis :</b><br>"
+                f"&nbsp;&nbsp;&nbsp;&nbsp;- Ø crête = {male['d_major']:.3f} mm<br>"
+                f"&nbsp;&nbsp;&nbsp;&nbsp;- Ø fond = {male['d_minor']:.3f} mm<br><br>"
+                "<b>⚙️ Profil écrou :</b><br>"
+                f"&nbsp;&nbsp;&nbsp;&nbsp;- Ø fond = {female['d_major']:.3f} mm<br>"
+                f"&nbsp;&nbsp;&nbsp;&nbsp;- Ø crête = {female['d_minor']:.3f} mm"
+            )
+
+            # Affichage dans le label de la première tab pour confirmer la sélection
+            self.summary_label.setText(self.summary_html)
+            self.model_button.setEnabled(True)
+            self.validate_params_btn.setEnabled(False)
+
+            # Optionnel : changer d'onglet une fois validé
+            self.tabs.setCurrentIndex(0)
+
+        except ValueError:
+            self.summary_label.setText("⚠️ Veuillez sélectionner un diamètre et un pas valides.")
+
+    def create_model(self):
+        """
+        Crée le modèle dans FreeCAD :
+          - Un Body est créé et trois esquisses y sont ajoutées.
+          - Chaque esquisse est attachée au plan XY (via OriginFeatures[3]).
+          - Trois nouveaux onglets sont ajoutés dans l'interface :
+              • "Nominal" : affichant le résumé & les données nominales.
+              • "Vis" : pour le profil mâle.
+              • "Ecrou" : pour le profil femelle.
+        """
+        try:
+            diameter = int(self.diameter_combo.currentText())
+            pitch = float(self.pitch_combo.currentText())
+
+            doc = FreeCAD.ActiveDocument
+            if doc is None:
+                doc = FreeCAD.newDocument()
+            # Création d'un Body dans lequel seront stockées les esquisses
+            body = doc.addObject("PartDesign::Body", "Body")
+            body.Label = "ThreadBody"
+
+            # Création des trois esquisses dans le document :
+            # 1. Esquisse Nominal (profil nominal)
+            sketch_nominal = doc.addObject('Sketcher::SketchObject', 'Nominal')
+            sketch_nominal.Label = "Nominal"
+            body.addObject(sketch_nominal)
+            sketch_nominal.AttachmentSupport = body.Origin.OriginFeatures[3]
+            sketch_nominal.MapMode = 'FlatFace'
+            # Pour cet exemple, on réutilise la géométrie nominale déjà utilisée dans le résumé
+            self.create_nominal_profile(sketch_nominal, diameter, pitch)
+
+            # 2. Esquisse Vis (profil mâle)
+            sketch_vis = doc.addObject('Sketcher::SketchObject', 'Vis')
+            sketch_vis.Label = "Vis"
+            body.addObject(sketch_vis)
+            sketch_vis.AttachmentSupport = body.Origin.OriginFeatures[3]
+            sketch_vis.MapMode = 'FlatFace'
+            self.create_male_profile(sketch_vis, diameter, pitch)
+
+            # 3. Esquisse Ecrou (profil femelle)
+            sketch_ecrou = doc.addObject('Sketcher::SketchObject', 'Ecrou')
+            sketch_ecrou.Label = "Ecrou"
+            body.addObject(sketch_ecrou)
+            sketch_ecrou.AttachmentSupport = body.Origin.OriginFeatures[3]
+            sketch_ecrou.MapMode = 'FlatFace'
+            self.create_female_profile(sketch_ecrou, diameter, pitch)
+
+            doc.recompute()
+
+            # Ajout des onglets pour chaque profil dans l'interface :
+            # Onglet "Nominal" avec le résumé et les données nominales
+            nominal_tab = QtWidgets.QWidget()
+            nominal_layout = QtWidgets.QVBoxLayout()
+            nominal_label = QtWidgets.QLabel(self.summary_html)
+            nominal_label.setTextFormat(QtCore.Qt.RichText)
+            nominal_layout.addWidget(nominal_label)
+            nominal_tab.setLayout(nominal_layout)
+            self.tabs.addTab(nominal_tab, "Nominal")
+
+            # Onglet "Vis" (profil mâle)
+            male_tab = QtWidgets.QWidget()
+            male_layout = QtWidgets.QVBoxLayout()
+            male_layout.addWidget(QtWidgets.QLabel("Profil mâle (Vis) créé dans le document."))
+            male_tab.setLayout(male_layout)
+            self.tabs.addTab(male_tab, "Vis")
+
+            # Onglet "Ecrou" (profil femelle)
+            ecrou_tab = QtWidgets.QWidget()
+            ecrou_layout = QtWidgets.QVBoxLayout()
+            ecrou_layout.addWidget(QtWidgets.QLabel("Profil femelle (Ecrou) créé dans le document."))
+            ecrou_tab.setLayout(ecrou_layout)
+            self.tabs.addTab(ecrou_tab, "Ecrou")
+
+            QtWidgets.QMessageBox.information(self, "Modélisation terminée", 
+                                              "Les onglets Nominal, Vis et Ecrou ont été créés avec succès.")
+
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Erreur", f"Erreur lors de la création du modèle : {str(e)}")
+
+    def create_nominal_profile(self, sketch, diameter, pitch):
+        """Crée la géométrie du profil nominal (trapézoïdal)."""
+        prof = calculate_thread_profiles(diameter, pitch)['base_profile']
+        H = prof['H']
+        H2 = prof['H2']
+        w = prof['w']
+        # Traçage du trapèze à l'aide de 4 segments
+        geo = [
+            Part.LineSegment(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(w, H, 0)),
+            Part.LineSegment(FreeCAD.Vector(w, H, 0), FreeCAD.Vector(0, H2, 0)),
+            Part.LineSegment(FreeCAD.Vector(0, H2, 0), FreeCAD.Vector(-w, H, 0)),
+            Part.LineSegment(FreeCAD.Vector(-w, H, 0), FreeCAD.Vector(0, 0, 0)),
+        ]
+        sketch.addGeometry(geo, False)
+        cons = [
+            Sketcher.Constraint('Coincident', 0, 2, 1, 1),
+            Sketcher.Constraint('Coincident', 1, 2, 2, 1),
+            Sketcher.Constraint('Coincident', 2, 2, 3, 1),
+            Sketcher.Constraint('Coincident', 3, 2, 0, 1),
+            Sketcher.Constraint('Horizontal', 0),
+            Sketcher.Constraint('Horizontal', 2),
+            Sketcher.Constraint('Vertical', 1),
+            Sketcher.Constraint('Vertical', 3),
+        ]
+        sketch.addConstraint(cons)
+
+    def create_male_profile(self, sketch, diameter, pitch):
+        """Crée la géométrie du profil mâle en dessinant deux cercles concentriques."""
+        info = calculate_thread_profiles(diameter, pitch)['male_thread']
+        d_major = info['d_major']
+        d_minor = info['d_minor']
+        r_major = d_major / 2.0
+        r_minor = d_minor / 2.0
+        outer_circle = Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), r_major)
+        inner_circle = Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), r_minor)
+        sketch.addGeometry(outer_circle, False)
+        sketch.addGeometry(inner_circle, False)
+
+    def create_female_profile(self, sketch, diameter, pitch):
+        """Crée la géométrie du profil femelle en dessinant deux cercles concentriques complémentaires."""
+        info = calculate_thread_profiles(diameter, pitch)['female_thread']
+        d_major = info['d_major']
+        d_minor = info['d_minor']
+        r_major = d_major / 2.0
+        r_minor = d_minor / 2.0
+        outer_circle = Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), r_major)
+        inner_circle = Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), r_minor)
+        sketch.addGeometry(outer_circle, False)
+        sketch.addGeometry(inner_circle, False)
+
+
+class ThreadDock(QtWidgets.QDockWidget):
+    def __init__(self, parent=None):
+        super(ThreadDock, self).__init__("Assistant de taraudage", parent)
+        self.setObjectName("ThreadDock")
+        
+        # L'instance de ThreadWizard est créée ici
+        self.threadWizard = ThreadWizard()
+        
+        # Optionnel : pour que le widget s'intègre bien
+        self.threadWizard.setWindowFlags(QtCore.Qt.Widget)
+        
+        # On place ThreadWizard dans le dock
+        self.setWidget(self.threadWizard)
+
+
+#if __name__ == "__main__":
+#    window = ThreadWizard()
+#    window.show()
+
+mainWin = FreeCADGui.getMainWindow()
+dock = ThreadDock(mainWin)
+mainWin.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
