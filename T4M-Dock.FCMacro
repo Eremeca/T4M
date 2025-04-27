@@ -29,7 +29,7 @@ def calculate_thread_profiles(diameter, pitch):
 thread_data = {
     "Tr": {
         8: {"pitches": [1.5, 2], "preferred": 1.5},
-         9: {"pitches": [1.5, 2], "preferred": 1.5},
+        9: {"pitches": [1.5, 2], "preferred": 1.5},
         10: {"pitches": [1.5, 2], "preferred": 2},
         11: {"pitches": [2, 3], "preferred": 2},
         12: {"pitches": [2, 3], "preferred": 3},
@@ -37,8 +37,67 @@ thread_data = {
         16: {"pitches": [2, 4], "preferred": 4},
         18: {"pitches": [2, 4], "preferred": 4},
         20: {"pitches": [2, 4], "preferred": 4},
-        # … autres diamètres éventuellement
+        22: {"pitches": [3, 5, 8], "preferred": 5},
+        24: {"pitches": [3, 5, 8], "preferred": 5},
+        26: {"pitches": [3, 5, 8], "preferred": 5},
+        28: {"pitches": [3, 5, 8], "preferred": 5},
+        30: {"pitches": [3, 6, 10], "preferred": 6},
+        32: {"pitches": [3, 6, 10], "preferred": 6},
+        34: {"pitches": [3, 6, 10], "preferred": 6},
+        36: {"pitches": [3, 6, 10], "preferred": 6},
+        38: {"pitches": [3, 7, 10], "preferred": 7},
+        40: {"pitches": [3, 7, 10], "preferred": 7},
+        42: {"pitches": [3, 7, 10], "preferred": 7},
+        44: {"pitches": [3, 7, 12], "preferred": 7},
+        46: {"pitches": [3, 8, 12], "preferred": 8},
+        48: {"pitches": [3, 8, 12], "preferred": 8},
+        50: {"pitches": [3, 8, 12], "preferred": 8},
+        52: {"pitches": [3, 8, 12], "preferred": 8},
+        55: {"pitches": [3, 9, 14], "preferred": 9},
+        60: {"pitches": [3, 9, 14], "preferred": 9},
+        65: {"pitches": [4, 10, 16], "preferred": 10},
+        70: {"pitches": [4, 10, 16], "preferred": 10},
+        75: {"pitches": [4, 10, 16], "preferred": 10},
+        80: {"pitches": [4, 10, 16], "preferred": 10},
+        85: {"pitches": [4, 12, 18], "preferred": 12},
+        90: {"pitches": [4, 12, 18], "preferred": 12},
+        95: {"pitches": [4, 12, 18], "preferred": 12},
+        100: {"pitches": [4, 12, 20], "preferred": 12},
+        105: {"pitches": [4, 12, 20], "preferred": 12},
+        110: {"pitches": [4, 12, 20], "preferred": 12},
+        115: {"pitches": [6, 14, 22], "preferred": 14},
+        120: {"pitches": [6, 14, 22], "preferred": 14},
+        125: {"pitches": [6, 14, 22], "preferred": 14},
+        130: {"pitches": [6, 14, 22], "preferred": 14},
+        135: {"pitches": [6, 14, 24], "preferred": 14},
+        140: {"pitches": [6, 14, 24], "preferred": 14},
+        145: {"pitches": [6, 14, 24], "preferred": 14},
+        150: {"pitches": [6, 16, 24], "preferred": 16},
+        155: {"pitches": [6, 16, 24], "preferred": 16},
+        160: {"pitches": [6, 16, 28], "preferred": 16},
+        165: {"pitches": [6, 16, 28], "preferred": 16},
+        170: {"pitches": [6, 16, 28], "preferred": 16},
+        175: {"pitches": [8, 16, 28], "preferred": 16},
+        180: {"pitches": [8, 18, 28], "preferred": 18},
+        185: {"pitches": [8, 18, 32], "preferred": 18},
+        190: {"pitches": [8, 18, 32], "preferred": 18},
+        195: {"pitches": [8, 18, 32], "preferred": 18},
+        200: {"pitches": [8, 18, 32], "preferred": 18},
+        210: {"pitches": [8, 20, 36], "preferred": 20},
+        220: {"pitches": [8, 20, 36], "preferred": 20},
+        230: {"pitches": [8, 20, 36], "preferred": 20},
+        240: {"pitches": [8, 22, 36], "preferred": 22},
+        250: {"pitches": [12, 22, 36], "preferred": 22},
+        260: {"pitches": [12, 22, 40], "preferred": 22},
+        270: {"pitches": [12, 24, 40], "preferred": 24},
+        280: {"pitches": [12, 24, 40], "preferred": 24},
+        290: {"pitches": [12, 24, 44], "preferred": 24},
         300: {"pitches": [12, 24, 44], "preferred": 24}
+    },
+
+    "Rd": {  # Filetage rond
+        8: {"pitches": [1, 1.5], "preferred": 1},
+        10: {"pitches": [1.5, 2], "preferred": 1.5},
     }
 }
 
@@ -104,22 +163,20 @@ class ThreadWizard(QtWidgets.QDialog):
         self.update_pitch_options()
 
     def update_pitch_options(self):
-        """Mets à jour le combobox des pas en fonction du type et diamètre sélectionnés."""
         thread_type = self.thread_type_combo.currentText()
-        current_text = self.diameter_combo.currentText()
-        if not current_text:
-            return
-        diameter = int(current_text)
+        diameter = int(self.diameter_combo.currentText())
+
         if thread_type in thread_data and diameter in thread_data[thread_type]:
             available_pitches = thread_data[thread_type][diameter]["pitches"]
             preferred_pitch = thread_data[thread_type][diameter]["preferred"]
         else:
-            available_pitches = [1.5, 2.0, 2.5]
+            available_pitches = [1.5, 2.0]
             preferred_pitch = None
 
         self.pitch_combo.clear()
         for p in available_pitches:
             self.pitch_combo.addItem(str(p))
+
         if preferred_pitch and preferred_pitch in available_pitches:
             index = available_pitches.index(preferred_pitch)
             self.pitch_combo.setCurrentIndex(index)
@@ -193,7 +250,8 @@ class ThreadWizard(QtWidgets.QDialog):
             sketch_nominal.AttachmentSupport = body.Origin.OriginFeatures[3]
             sketch_nominal.MapMode = 'FlatFace'
             # Pour cet exemple, on réutilise la géométrie nominale déjà utilisée dans le résumé
-            self.create_nominal_profile(sketch_nominal, diameter, pitch)
+            thread_type = self.thread_type_combo.currentText()  # Récupération du type sélectionné
+            self.create_nominal_profile(sketch_nominal, diameter, pitch, thread_type)
 
             # 2. Esquisse Vis (profil mâle)
             sketch_vis = doc.addObject('Sketcher::SketchObject', 'Vis')
@@ -244,30 +302,37 @@ class ThreadWizard(QtWidgets.QDialog):
             QtWidgets.QMessageBox.critical(self, "Erreur", f"Erreur lors de la création du modèle : {str(e)}")
 
     def create_nominal_profile(self, sketch, diameter, pitch):
-        """Crée la géométrie du profil nominal (trapézoïdal)."""
-        prof = calculate_thread_profiles(diameter, pitch)['base_profile']
-        H = prof['H']
-        H2 = prof['H2']
-        w = prof['w']
-        # Traçage du trapèze à l'aide de 4 segments
-        geo = [
-            Part.LineSegment(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(w, H, 0)),
-            Part.LineSegment(FreeCAD.Vector(w, H, 0), FreeCAD.Vector(0, H2, 0)),
-            Part.LineSegment(FreeCAD.Vector(0, H2, 0), FreeCAD.Vector(-w, H, 0)),
-            Part.LineSegment(FreeCAD.Vector(-w, H, 0), FreeCAD.Vector(0, 0, 0)),
-        ]
-        sketch.addGeometry(geo, False)
-        cons = [
-            Sketcher.Constraint('Coincident', 0, 2, 1, 1),
-            Sketcher.Constraint('Coincident', 1, 2, 2, 1),
-            Sketcher.Constraint('Coincident', 2, 2, 3, 1),
-            Sketcher.Constraint('Coincident', 3, 2, 0, 1),
-            Sketcher.Constraint('Horizontal', 0),
-            Sketcher.Constraint('Horizontal', 2),
-            Sketcher.Constraint('Vertical', 1),
-            Sketcher.Constraint('Vertical', 3),
-        ]
-        sketch.addConstraint(cons)
+        if thread_type == "Rd":
+            r1 = 0.25 * pitch  # Rayon de crête
+            r2 = 0.15 * pitch  # Rayon de fond
+            arc1 = Part.Arc(FreeCAD.Vector(-r1, 0, 0), FreeCAD.Vector(0, pitch, 0), FreeCAD.Vector(r1, 0, 0))
+            arc2 = Part.Arc(FreeCAD.Vector(-r2, pitch, 0), FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(r2, pitch, 0))
+            sketch.addGeometry(arc1, False)
+            sketch.addGeometry(arc2, False)
+        else :
+            prof = calculate_thread_profiles(diameter, pitch)['base_profile']
+            H = prof['H']
+            H2 = prof['H2']
+            w = prof['w']
+            # Traçage du trapèze à l'aide de 4 segments
+            geo = [
+                Part.LineSegment(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(w, H, 0)),
+                Part.LineSegment(FreeCAD.Vector(w, H, 0), FreeCAD.Vector(0, H2, 0)),
+                Part.LineSegment(FreeCAD.Vector(0, H2, 0), FreeCAD.Vector(-w, H, 0)),
+                Part.LineSegment(FreeCAD.Vector(-w, H, 0), FreeCAD.Vector(0, 0, 0)),
+            ]
+            sketch.addGeometry(geo, False)
+            cons = [
+                Sketcher.Constraint('Coincident', 0, 2, 1, 1),
+                Sketcher.Constraint('Coincident', 1, 2, 2, 1),
+                Sketcher.Constraint('Coincident', 2, 2, 3, 1),
+                Sketcher.Constraint('Coincident', 3, 2, 0, 1),
+                Sketcher.Constraint('Horizontal', 0),
+                Sketcher.Constraint('Horizontal', 2),
+                Sketcher.Constraint('Vertical', 1),
+                Sketcher.Constraint('Vertical', 3),
+            ]
+            sketch.addConstraint(cons)
 
     def create_male_profile(self, sketch, diameter, pitch):
         """Crée la géométrie du profil mâle en dessinant deux cercles concentriques."""
@@ -292,7 +357,6 @@ class ThreadWizard(QtWidgets.QDialog):
         inner_circle = Part.Circle(FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1), r_minor)
         sketch.addGeometry(outer_circle, False)
         sketch.addGeometry(inner_circle, False)
-
 
 class ThreadDock(QtWidgets.QDockWidget):
     def __init__(self, parent=None):
